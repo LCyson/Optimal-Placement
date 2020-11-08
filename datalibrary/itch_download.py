@@ -28,3 +28,6 @@ def may_be_download(url):
             with open(unzipped, 'wb') as f_out:
                 shutil.copyfileobj(f_in, f_out)
     return unzipped
+
+file_name = may_be_download(urljoin(FTP_URL, SOURCE_FILE))
+date = file_name.name.split('.')[0]

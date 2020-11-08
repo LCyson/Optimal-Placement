@@ -1,14 +1,9 @@
-from datetime import datetime
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter
 from struct import unpack
 from collections import namedtuple, Counter
 from datetime import timedelta
 from time import time
 from format_dictionary import *
-from data_importer import *
+from datalibrary.itch_download import *
 
 import pandas as pd
 
@@ -64,7 +59,7 @@ def store_messages(m):
                          min_itemsize=s,
                          data_columns=dc)
 
-def load_message(message_types_file_name, itch_data)
+def load_message(message_types_file_name, itch_data):
     message_data = (pd.read_excel('data/message_types.xlsx',
                                   sheet_name='messages')
                     .sort_values('id')
@@ -150,5 +145,5 @@ def load_message(message_types_file_name, itch_data)
                                                     timedelta(seconds=time() - start)))
                 store_messages(messages)
                 messages = {}
-
+    
     print(timedelta(seconds=time() - start))
