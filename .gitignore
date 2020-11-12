@@ -1,5 +1,11 @@
+<<<<<<< Updated upstream
 *literature/
+=======
 *.h5
+*.bin
+*.zip
+*.gz
+*.DS_Store
 *.py[cod]
 *$py.class
 

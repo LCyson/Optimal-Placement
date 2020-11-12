@@ -129,7 +129,6 @@ with file_name.open('rb') as data:
 
         # read & store message
         record = data.read(message_size - 1)
-        # b'\x00\x00\x00\x00\t\xfaM:\xd2kO'
         message = message_fields[message_type]._make(unpack(fstring[message_type], record))
         messages[message_type].append(message)
 
