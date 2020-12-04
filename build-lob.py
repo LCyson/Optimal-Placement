@@ -4,8 +4,12 @@ from struct import unpack
 from collections import namedtuple, Counter
 from datetime import timedelta
 from time import time
+import time as t_sleep
+import datetime as dt
+import q_table
 
-ITCH_STORE = 'itch.h5'
+
+ITCH_STORE = 'datalibrary/data/itch.h5'
 ORDER_BOOK_STORE = 'order_book.h5'
 STOCK = 'AAPL'
 
@@ -96,13 +100,22 @@ def save_orders(stock, orders, append=False):
             else:
                 store.put(key, df.set_index('timestamp'))
 
-messages = get_messages(date='01302019',stock=STOCK)    
+def sort_order_book(bid_side, ask_side):
+    return
+
+print("Before parsing messages")
+messages = get_messages(date='07302019',stock=STOCK)
 order_book = {-1: {}, 1: {}}
 current_orders = {-1: Counter(), 1: Counter()}
 message_counter = Counter()
 nlevels = 100
 
 start = time()
+ticker = 93141044776.0
+limit_order_price = 0
+bb_pos = 0
+bb_size = 0
+
 for message in messages.itertuples():
     i = message[0]
     if i % 1e5 == 0 and i > 0:
@@ -124,8 +137,12 @@ for message in messages.itertuples():
         current_orders[buysell].update({price: shares})
         current_orders[buysell], new_order = add_orders(current_orders[buysell], buysell, nlevels)
         order_book[buysell][message.timestamp] = new_order
+        # t_sleep.sleep(3)
+        # print("orderbook A: ", order_book)
+    elif message.type in ['E', 'C', 'X', 'D', 'U']:
 
-    if message.type in ['E', 'C', 'X', 'D', 'U']:
+        # t_sleep.sleep(3)
+        # print("orderbook ECX: ", order_book)
         if message.type == 'U':
             if not np.isnan(message.shares_replaced):
                 price = int(message.price_replaced)
@@ -135,9 +152,68 @@ for message in messages.itertuples():
                 price = int(message.price)
                 shares = -int(message.shares)
 
+
+
         if price is not None:
             current_orders[buysell].update({price: shares})
             if current_orders[buysell][price] <= 0:
                 current_orders[buysell].pop(price)
             current_orders[buysell], new_order = add_orders(current_orders[buysell], buysell, nlevels)
-            order_book[buysell][message.timestamp] = new_order                
+            order_book[buysell][message.timestamp] = new_order
+
+            # adjust bb pos and bb size accordingly, or execute the order
+            print("limit_order_price, E=", limit_order_price, message.price)
+            if price == limit_order_price and message.type != 'D':
+                if (message.shares >= bb_pos - 1):
+                    print("Execute our limit order at price", price)
+                    print("Execute at time:", message.timestamp)
+
+                    # sorted(current_orders[-1].items()
+
+                    break
+                else:
+                    bb_pos -= message.shares
+                    bb_size -= message.shares
+    else:
+        continue
+
+    current_time = float(dt.datetime.strftime(message.timestamp, '%H%M%S%f'))
+    # print("timestamp", message.timestamp )
+    if (current_time - ticker) >= 0.05:
+        # print (len(current_orders[-1]))
+        # print (len(current_orders[1]))
+        # print (sorted(current_orders[-1].items()))
+        # print (sorted(current_orders[1].items(), reverse=True))
+        sorted_bid_side = sorted(current_orders[-1].items())
+        sorted_ask_side = sorted(current_orders[1].items(), reverse=True)
+        if limit_order_price == 0:
+            print("init limit order price")
+            ba_order = next(iter(sorted_ask_side))
+            limit_order_price = ba_order[0]
+            # print("sorted order book:", sorted_ask_side)
+            # print("ba order book:", ba_order)
+            bb_pos = ba_order[1] + 1
+            bb_size = ba_order[1] + 1
+
+        # iterate items to find current limit order position
+        for order in sorted_ask_side:
+            if order[0] == limit_order_price:
+                bb_size = order[1] + 1
+                break
+
+        state_idx = int((bb_pos / bb_size) * 30)
+        print("bb_pos, bb_size, state idx = ", bb_pos, bb_size, state_idx)
+        stay_score = q_table.h_Stay[min(bb_size, 29)][state_idx]
+        market_score = q_table.h_Mkt[min(bb_size, 29)][state_idx]
+
+        print("mkt score:", market_score)
+        print("stay score:", stay_score)
+
+        if (market_score > stay_score):
+            bb_order = next(iter(sorted_bid_side))
+            print("Place market order at price: ", bb_order[0])
+            break
+
+        # t_sleep.sleep(3)
+        ticker = current_time
+
