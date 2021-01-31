@@ -1,6 +1,7 @@
 <<<<<<< Updated upstream
 *literature/
 =======
+*.DS_Store
 *.h5
 *.bin
 *.zip

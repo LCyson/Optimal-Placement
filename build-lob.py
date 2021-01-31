@@ -9,6 +9,16 @@ import datetime as dt
 import q_table
 
 
+DATA_PATH = os.path.join(os.path.dirname(__file__), 'datalibrary', 'data')
+
+file_name = "intensity-values.csv"
+intensity_values = pd.read_csv(os.path.join(DATA_PATH, file_name), index_col=0)
+intensity_values = intensity_values[intensity_values['Spread'] == 1].groupby(
+    ['BB size']).agg(dict(Limit='mean', Cancel='mean', Market='mean'))
+
+intensity_values.reset_index(inplace = True)
+intensity_values.loc[0, ['Cancel','Market']] = 0
+
 ITCH_STORE = 'datalibrary/data/itch.h5'
 ORDER_BOOK_STORE = 'order_book.h5'
 STOCK = 'AAPL'
