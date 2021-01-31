@@ -127,4 +127,13 @@ def numerical_solution(nb_iter, size_q, intensities, tol = 0.1, reward_exec=None
     df['Decision']  = index_next_1
     return df
         
+def Read_h_0_theo(h,size_q, reward_exec):
+    h_0_theo = np.ones((size_q,size_q+1)) # For bb_pos : index 0 is market order, index 1 is execution 
+    h_0_theo[1:,2:] = np.nan_to_num(h.reshape((size_q-1,size_q-1)))
+    ## FINAL CONSTRAINT
+    for qsame in range(size_q): # qsame is the size
+        h_0_theo[qsame,qsame+2:] = np.nan
+        h_0_theo[qsame,0] = reward_exec(qsame, -1)# market
+        h_0_theo[qsame,1] = reward_exec(qsame, 0)# execution
+    return h_0_theo
         
