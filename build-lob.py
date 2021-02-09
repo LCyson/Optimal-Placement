@@ -9,16 +9,6 @@ import datetime as dt
 import q_table
 
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), 'datalibrary', 'data')
-
-file_name = "intensity-values.csv"
-intensity_values = pd.read_csv(os.path.join(DATA_PATH, file_name), index_col=0)
-intensity_values = intensity_values[intensity_values['Spread'] == 1].groupby(
-    ['BB size']).agg(dict(Limit='mean', Cancel='mean', Market='mean'))
-
-intensity_values.reset_index(inplace = True)
-intensity_values.loc[0, ['Cancel','Market']] = 0
-
 ITCH_STORE = 'datalibrary/data/itch.h5'
 ORDER_BOOK_STORE = 'order_book.h5'
 STOCK = 'AAPL'
@@ -31,7 +21,7 @@ trades['value_share'] = trades.value.div(trades.value.sum())
 trade_summary = trades.groupby('stock').value_share.sum().sort_values(ascending=False)
 
 order_dict = {-1: 'sell', 1: 'buy'}
-
+#%%
 def get_messages(date, stock):
     """Collect trading messages for given stock"""
     with pd.HDFStore(ITCH_STORE) as store:
@@ -115,23 +105,33 @@ def sort_order_book(bid_side, ask_side):
 
 print("Before parsing messages")
 messages = get_messages(date='07302019',stock=STOCK)
+
+
+
 order_book = {-1: {}, 1: {}}
 current_orders = {-1: Counter(), 1: Counter()}
 message_counter = Counter()
 nlevels = 100
 
 start = time()
-ticker = 93141044776.0
+ticker = 93141044776.0 + 3600*10**6
 limit_order_price = 0
 bb_pos = 0
 bb_size = 0
+
+
+limit_order_book = dict()
+
+AES = 50
+def translate_state(oders, aes):
+    return
 
 for message in messages.itertuples():
     i = message[0]
     if i % 1e5 == 0 and i > 0:
         print('{:,.0f}\t\t{}'.format(i, timedelta(seconds=time() - start)))
-        save_orders(STOCK, order_book, append=True)
-        order_book = {-1: {}, 1: {}}
+        #save_orders(STOCK, order_book, append=True)
+        #order_book = {-1: {}, 1: {}}
         start = time()
     if np.isnan(message.buy_sell_indicator):
         continue
@@ -139,6 +139,8 @@ for message in messages.itertuples():
 
     buysell = message.buy_sell_indicator
     price, shares = None, None
+
+
 
     if message.type in ['A', 'F', 'U']:
         price = int(message.price)
@@ -169,10 +171,10 @@ for message in messages.itertuples():
             if current_orders[buysell][price] <= 0:
                 current_orders[buysell].pop(price)
             current_orders[buysell], new_order = add_orders(current_orders[buysell], buysell, nlevels)
-            order_book[buysell][message.timestamp] = new_order
+            #order_book[buysell][message.timestamp] = new_order
 
             # adjust bb pos and bb size accordingly, or execute the order
-            print("limit_order_price, E=", limit_order_price, message.price)
+            #print("limit_order_price, E=", limit_order_price, message.price)
             if price == limit_order_price and message.type != 'D':
                 if (message.shares >= bb_pos - 1):
                     print("Execute our limit order at price", price)
@@ -194,27 +196,35 @@ for message in messages.itertuples():
         # print (len(current_orders[1]))
         # print (sorted(current_orders[-1].items()))
         # print (sorted(current_orders[1].items(), reverse=True))
-        sorted_bid_side = sorted(current_orders[-1].items())
-        sorted_ask_side = sorted(current_orders[1].items(), reverse=True)
+        sorted_ask_side = sorted(current_orders[-1].items())
+        sorted_bid_side = sorted(current_orders[1].items(), reverse=True)
+        if sorted_ask_side[0][0] > sorted_bid_side[0][0]:
+            print('X')
         if limit_order_price == 0:
             print("init limit order price")
             ba_order = next(iter(sorted_ask_side))
+            bb_order = next(iter(sorted_bid_side))
             limit_order_price = ba_order[0]
-            # print("sorted order book:", sorted_ask_side)
-            # print("ba order book:", ba_order)
-            bb_pos = ba_order[1] + 1
-            bb_size = ba_order[1] + 1
+            ##### Need to:
+                # - Add in reference price
+                
+            ## Naive ref price, update as in LeHalle
+            ref_price = 0.5 * (ba_order[0] + bb_order[0])
+            
+            
+            bb_pos = int(ba_order[1]/AES) + 1
+            bb_size = int(ba_order[1]/AES) + 1
 
         # iterate items to find current limit order position
         for order in sorted_ask_side:
             if order[0] == limit_order_price:
-                bb_size = order[1] + 1
+                bb_size = int(order[1]/AES) + 1
                 break
 
         state_idx = int((bb_pos / bb_size) * 30)
         print("bb_pos, bb_size, state idx = ", bb_pos, bb_size, state_idx)
-        stay_score = q_table.h_Stay[min(bb_size, 29)][state_idx]
-        market_score = q_table.h_Mkt[min(bb_size, 29)][state_idx]
+        stay_score = q_table.h_Stay[min(bb_size, 29)][min(bb_pos, 29)]
+        market_score = q_table.h_Mkt[min(bb_size, 29)][min(bb_pos, 29)]
 
         print("mkt score:", market_score)
         print("stay score:", stay_score)
