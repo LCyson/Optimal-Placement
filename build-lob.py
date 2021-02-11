@@ -129,10 +129,9 @@ def translate_state(oders, aes):
 n_units = 10
 limit_buy_prices = []
 units_placed = 0
-
+i_last_sale = 0
 for message in messages.itertuples():
     i = message[0]
-    i_last_sale = 0
     if i % 1e5 == 0 and i > 0:
         print('{:,.0f}\t\t{}'.format(i, timedelta(seconds=time() - start)))
         #save_orders(STOCK, order_book, append=True)
@@ -193,7 +192,8 @@ for message in messages.itertuples():
                 else:
                     bb_pos -= message.shares
                     bb_size -= message.shares
-            elif limit_order_price !=0 and i - i_last_sale > 1e5 and i_last_sale != 0:
+            elif (limit_order_price !=0 and i - i_last_sale > 1e5 and i_last_sale != 0) \
+                or (i_last_sale ==0 and i > 1e6):
                 limit_order_price = 0
                 print("Replacing order to front of queue")
     else:
