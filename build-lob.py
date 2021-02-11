@@ -114,7 +114,7 @@ message_counter = Counter()
 nlevels = 100
 
 start = time()
-ticker = 93141044776.0 + 3600*10**6
+ticker = 93141044776.0 + 3600*1e6
 limit_order_price = 0
 bb_pos = 0
 bb_size = 0
@@ -126,8 +126,13 @@ AES = 50
 def translate_state(oders, aes):
     return
 
+n_units = 10
+limit_buy_prices = []
+units_placed = 0
+
 for message in messages.itertuples():
     i = message[0]
+    i_last_sale = 0
     if i % 1e5 == 0 and i > 0:
         print('{:,.0f}\t\t{}'.format(i, timedelta(seconds=time() - start)))
         #save_orders(STOCK, order_book, append=True)
@@ -179,13 +184,18 @@ for message in messages.itertuples():
                 if (message.shares >= bb_pos - 1):
                     print("Execute our limit order at price", price)
                     print("Execute at time:", message.timestamp)
-
+                    limit_buy_prices.append(price)
+                    limit_order_price = 0
+                    i_last_sale = i
                     # sorted(current_orders[-1].items()
-
-                    break
+                    if units_placed >= n_units:
+                        break
                 else:
                     bb_pos -= message.shares
                     bb_size -= message.shares
+            elif limit_order_price !=0 and i - i_last_sale > 1e5 and i_last_sale != 0:
+                limit_order_price = 0
+                print("Replacing order to front of queue")
     else:
         continue
 
@@ -198,18 +208,19 @@ for message in messages.itertuples():
         # print (sorted(current_orders[1].items(), reverse=True))
         sorted_ask_side = sorted(current_orders[-1].items())
         sorted_bid_side = sorted(current_orders[1].items(), reverse=True)
-        if sorted_ask_side[0][0] > sorted_bid_side[0][0]:
-            print('X')
+        #if sorted_ask_side[0][0] > sorted_bid_side[0][0]:
+        #    print('X')
         if limit_order_price == 0:
             print("init limit order price")
             ba_order = next(iter(sorted_ask_side))
             bb_order = next(iter(sorted_bid_side))
             limit_order_price = ba_order[0]
+            i_last_sale = i 
             ##### Need to:
                 # - Add in reference price
                 
             ## Naive ref price, update as in LeHalle
-            ref_price = 0.5 * (ba_order[0] + bb_order[0])
+            #ref_price = 0.5 * (ba_order[0] + bb_order[0])
             
             
             bb_pos = int(ba_order[1]/AES) + 1
@@ -221,13 +232,15 @@ for message in messages.itertuples():
                 bb_size = int(order[1]/AES) + 1
                 break
 
-        state_idx = int((bb_pos / bb_size) * 30)
-        print("bb_pos, bb_size, state idx = ", bb_pos, bb_size, state_idx)
+        #state_idx = int((bb_pos / bb_size) * 30)
         stay_score = q_table.h_Stay[min(bb_size, 29)][min(bb_pos, 29)]
         market_score = q_table.h_Mkt[min(bb_size, 29)][min(bb_pos, 29)]
 
-        print("mkt score:", market_score)
-        print("stay score:", stay_score)
+        if i % 1e4 == 0:
+            print("bb_pos, bb_size", bb_pos, bb_size  )
+
+            print("mkt score:", market_score)
+            print("stay score:", stay_score)
 
         if (market_score > stay_score):
             bb_order = next(iter(sorted_bid_side))
