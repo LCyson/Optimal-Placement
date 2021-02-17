@@ -7,7 +7,7 @@ from itertools import product
 DATA_PATH = os.path.join(os.getcwd(), 'datalibrary', 'data')
 N_TICKS = 2
 BOTH_SIDES = True
-TIME = 5000
+TIME = 50
 N_SHARES = 100
 MAX_Q = 10
 
@@ -25,7 +25,7 @@ intensity_values.loc[(1,1), ['Cancel', 'Market']] = 1e-6
 max_queue_size = MAX_Q
 #%%
 # Initialize an agent, this uses Keras with TensorFlow as a backend
-agent = DQNAgent(state_size=N_TICKS + 4, action_size=4)
+agent = DQNAgent(state_size=K * N_TICKS + 4, action_size=4)
 #%%
 
 ''' Inputs:
@@ -193,26 +193,27 @@ def simulate_market(state, intensities, n_ticks, both_sides, max_q=MAX_Q, check_
 def calc_reward(old_state, new_state, side='buy'):
     if side.lower() == 'buy':
         if new_state is None:
-            reward = old_state[shares_left_idx] * -1 
+            reward = old_state[shares_left_idx] * -0.5 
         elif old_state[shares_left_idx] - new_state[shares_left_idx] == 1:
             reward = N_TICKS - new_state[our_tick_idx]
         else:
             reward = 0
     return reward
+
 decisons = ['limit', 'cancel', 'market']
 new_state = init_state_vec
-for k in range(100):            
+for k in range(51):            
     decision, tick = simulate_market(new_state, intensity_values, N_TICKS, True)
-    print('decision', decisons[decision])
-    print('tick', tick)
+    #print('decision', decisons[decision])
+    #print('tick', tick)
     old_state = np.copy(new_state)
     new_state = market_state_update(init_state_vec, decision, tick)
-    print('Old state:', old_state)
-    print('New state:', new_state)
+    #print('Old state:', old_state)
+    #print('New state:', new_state)
     reward = calc_reward(old_state, new_state)
     print('Reward:', reward)
 
-  
+
     
     
     

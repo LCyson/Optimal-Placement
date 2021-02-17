@@ -72,7 +72,7 @@ class DQNAgent:
             Q-table corresponding to the current chain of states. '''
         with self.tf_session.as_default():
             with self.tf_graph.as_default():
-                act_values = self.model.predict(state)
+                act_values = self.model.predict(state, steps=50)
         print("Q-table:")
         print(act_values[0])
         return [np.argmax(act_values[0]), act_values[0]]  # returns action and Q-table
