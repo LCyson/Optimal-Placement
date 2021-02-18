@@ -86,7 +86,7 @@ for k in range(ROUNDS):
 
    if new_state is None:
        new_state, simu = init_state()
-   if k % 1000 == 0 and k > 0:
+   if k % 250 == 0 and k > 0:
        print("round", k)
        print("state:", new_state)
        print("Q-table:")

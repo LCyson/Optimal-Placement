@@ -47,14 +47,15 @@ class marketSimulation:
             return state
         
         elif action == 1:
-            state[state[self.our_tick_idx]] -= 1     # Decrease the queue size of current tick
+            if state[state[self.our_tick_idx]] > 0:
+                state[state[self.our_tick_idx]] -= 1     # Decrease the queue size of current tick
             
             if state[self.our_tick_idx] == 0:
                 state[self.shares_left_idx] -= 1     # We sell one share
                 # We then move to the very last tick (this is just an arbitrary way to proceed)
                 if state[self.n_ticks - 1] < self.max_q -1:
                     state[self.n_ticks - 1] += 1
-                state[self.our_tick_idx] = self.n_ticks 
+                state[self.our_tick_idx] = self.n_ticks - 1 
             
             else:
                 state[state[self.our_tick_idx]] += 1 # Increase the size of the next tick
@@ -69,7 +70,7 @@ class marketSimulation:
                 state[state[self.our_tick_idx]] -= 1 # Decrease the queue size of current tick
                 if state[self.our_tick_idx] < self.n_ticks:
                     state[self.our_tick_idx] += 1        # Moveup a tick
-                if state[state[self.our_tick_idx]] < self.n_ticks :
+                if state[state[self.our_tick_idx]] < self.n_ticks - 1:
                     state[state[self.our_tick_idx]] += 1 # Increase the size of the next tick
         
         elif action == 3:
@@ -78,7 +79,7 @@ class marketSimulation:
             # We then move to the very last tick (this is just an arbitrary way to proceed)
             if state[self.n_ticks - 1] != self.max_q -1:
                 state[self.n_ticks - 1] += 1
-            state[self.our_tick_idx] = self.n_ticks
+            state[self.our_tick_idx] = self.n_ticks -1
         
         return state
             
@@ -110,9 +111,9 @@ class marketSimulation:
                 else:
                     state[self.shares_left_idx] -= 1         # We sell one share
                     # We then move to the very last tick (this is just an arbitrary way to proceed)
-                    if state[self.n_ticks - 1] < self.max_q -1:
+                    if state[self.n_ticks - 1] < self.max_q-1:
                         state[self.n_ticks - 1] += 1
-                    state[self.our_tick_idx] = self.n_ticks
+                    state[self.our_tick_idx] = self.n_ticks - 1    
         return state
             
     def simulate_market(self, state, both_sides=True, check_valid=True):
@@ -148,11 +149,11 @@ class marketSimulation:
             # since the intensities are symmetric, I calulate the intensities for 
             # just one side of the book. Once we determine which tick we will have
             # an arrival, we then `flip a coin' to see whether its on the buy/sell side
-            if (np.random.rand() > 0.5 and state[tick_idx + self.n_ticks] != 0) or state[tick_idx] == 0 or state[tick_idx] == self.max_q-1:
+            if (np.random.rand() > 0.5 and state[tick_idx + self.n_ticks - 1] != 0) or state[tick_idx] == 0 or state[tick_idx] == self.max_q-1:
                 #if state[tick_idx + n_ticks] == 0 and decision_idx:
                 #    decision_idx = 0             cc
                 #elif state[tick_idx + n_ticks] == max_q - 1:
-                tick_idx = tick_idx + self.n_ticks  
+                tick_idx = tick_idx + self.n_ticks - 1 
             x = 0
     
             if check_valid:
@@ -168,7 +169,7 @@ class marketSimulation:
             if new_state is None:
                 reward = old_state[self.shares_left_idx] * -2
             elif old_state[self.shares_left_idx] - new_state[self.shares_left_idx] == 1:
-                reward = self.n_ticks - new_state[self.our_tick_idx]
+                reward = self.n_ticks - old_state[self.our_tick_idx] - 1
             else:
                 reward = 0
         return reward
