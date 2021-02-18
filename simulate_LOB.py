@@ -50,33 +50,34 @@ class marketSimulation:
             if state[state[self.our_tick_idx]] > 0:
                 state[state[self.our_tick_idx]] -= 1     # Decrease the queue size of current tick
             
-            if state[self.our_tick_idx] == 0:
+            if state[self.our_tick_idx] == self.n_ticks -1:
                 state[self.shares_left_idx] -= 1     # We sell one share
-                # We then move to the very last tick (this is just an arbitrary way to proceed)
-                if state[self.n_ticks - 1] < self.max_q -1:
+                # We then move to the very first tick (this is just an arbitrary way to proceed)
+                if state[self.n_ticks - 1] < self.max_q - 1:
                     state[self.n_ticks - 1] += 1
                 state[self.our_tick_idx] = self.n_ticks - 1 
             
             else:
-                state[state[self.our_tick_idx]] += 1 # Increase the size of the next tick
-                state[self.our_tick_idx] -= 1        # Move up a tick
+                if state[state[self.our_tick_idx]] < self.max_q - 1:
+                    state[state[self.our_tick_idx]] += 1 # Increase the size of the next tick
+                    state[self.our_tick_idx] += 1        # Move up a tick
         
         elif action == 2:
             
-            if state[self.our_tick_idx] == self.n_ticks - 1:
+            if state[self.our_tick_idx] == 0:
                 return state 
             
             else:
                 state[state[self.our_tick_idx]] -= 1 # Decrease the queue size of current tick
                 if state[self.our_tick_idx] < self.n_ticks:
-                    state[self.our_tick_idx] += 1        # Moveup a tick
+                    state[self.our_tick_idx] -= 1        # back a tick
                 if state[state[self.our_tick_idx]] < self.n_ticks - 1:
                     state[state[self.our_tick_idx]] += 1 # Increase the size of the next tick
         
         elif action == 3:
             state[state[self.our_tick_idx]] -= 1     # Decrease the queue size of current tick
             state[self.shares_left_idx] -= 1         # We sell one share
-            # We then move to the very last tick (this is just an arbitrary way to proceed)
+            # We then move to the very first tick (this is just an arbitrary way to proceed)
             if state[self.n_ticks - 1] != self.max_q -1:
                 state[self.n_ticks - 1] += 1
             state[self.our_tick_idx] = self.n_ticks -1
