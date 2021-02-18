@@ -34,11 +34,11 @@ class marketSimulation:
     
     def agent_state_update(self, state, action):   
         if state[self.shares_left_idx] <= 0:
-            print('All shares have been sold.')
+            #print('All shares have been sold.')
             return None 
         
         if state[self.time_left_idx] <= 0:
-            print('Out of time.')
+            #print('Out of time.')
             return None
        
         state[self.time_left_idx] -= 1               # subtract unit of time
@@ -83,7 +83,7 @@ class marketSimulation:
             
     def market_state_update(self, state, decision, tick):
         if state[self.time_left_idx] <= 0:
-            print('Out of time.')
+            #print('Out of time.')
             return None
        
         state[self.time_left_idx] -= 1  # subtract unit of time
@@ -133,7 +133,7 @@ class marketSimulation:
             min_time_idx = arrival_times.argmin() 
             tick_idx = min_time_idx // 3
             decision_idx = min_time_idx % 3
-            print(queue_sizes)
+            #print(queue_sizes)
             if (queue_sizes == np.zeros([1, self.n_ticks * 2])).all():
                 decision_idx = 0
                 tick_idx = np.random.randint(self.n_ticks * 2)

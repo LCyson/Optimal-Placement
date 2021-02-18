@@ -8,9 +8,9 @@ from agents import DQNAgent
 N_TICKS = 4
 BOTH_SIDES = True
 TIME = 100
-N_SHARES = 1
+N_SHARES = 5
 MAX_Q = 10
-ROUNDS = 5
+ROUNDS = 5*10**6
 
 # Start with a random state
 # np.random.seed(420)
@@ -81,18 +81,23 @@ new_state, simu = init_state()
 #        print('Reward:', reward)
 
 actions = ['stay', 'up', 'down', 'market']
-for k in range(int(1e4)):
+for k in range(ROUNDS):
    # Decide action
-    if new_state is None:
-        new_state, simu = init_state()
-    print('new state:', new_state)
-    action, q_table = agent.act(np.array([new_state]))
-    decision, tick = simu.simulate_market(new_state)
-    old_state = np.copy(new_state)
-    new_state = simu.market_state_update(new_state, decision, tick)
-    reward = simu.calc_reward(old_state, new_state, side='buy')
-    if old_state is not None and new_state is not None:
-        agent.remember(old_state, action, reward, new_state)
-    # agent learns from old states by remembering and replaying them
-    if k > 32:
-        agent.replay(32)
+
+   if new_state is None:
+       new_state, simu = init_state()
+   if k % 1000 == 0 and k > 0:
+       print("round", k)
+       print("state:", new_state)
+       print("Q-table:")
+       print(agent.model.predict(np.array([new_state])))       
+   action, q_table = agent.act(np.array([new_state]))
+   decision, tick = simu.simulate_market(new_state)
+   old_state = np.copy(new_state)
+   new_state = simu.market_state_update(new_state, decision, tick)
+   reward = simu.calc_reward(old_state, new_state, side='buy')
+   if old_state is not None and new_state is not None:
+       agent.remember(old_state, action, reward, new_state)
+# agent learns from old states by remembering and replaying them
+   if k > 32:
+       agent.replay(32)

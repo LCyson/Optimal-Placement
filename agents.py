@@ -73,8 +73,8 @@ class DQNAgent:
         with self.tf_session.as_default():
             with self.tf_graph.as_default():
                 act_values = self.model.predict(state)
-        print("Q-table:")
-        print(act_values[0])
+        #print("Q-table:")
+        #print(act_values[0])
         return [np.argmax(act_values[0]), act_values[0]]  # returns action and Q-table
 
     def replay(self, batch_size):
