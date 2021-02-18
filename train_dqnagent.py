@@ -87,15 +87,21 @@ r = 0
 actions = ['stay', 'up', 'down', 'market']
 for k in range(ROUNDS):
    new_state, simu = init_state()
-   if k % 250 == 0 and k > 0:
-       print("round", k)
-       print("state:", new_state)
-       print("Q-table:")
-       print(agent.model.predict(np.array([new_state])))   
+#   if k % 250 == 0 and k > 0:
+#       print("round", k)
+#       print("state:", new_state)
+#       print("Q-table:")
+#       print(agent.model.predict(np.array([new_state])))   
    
    j = 0
    while new_state is not None: 
        j += 1
+       if j % 10 == 0 and k % 1000 == 0 and j > 0 and k > 0:
+           print("round", k)
+           print("episode", j)
+           print("state:", new_state)
+           print("Q-table:")
+           print(agent.model.predict(np.array([new_state])))   
        old_state = np.copy(new_state)
        action, q_table = agent.act(np.array([new_state]))
        new_state = simu.agent_state_update(new_state, action)

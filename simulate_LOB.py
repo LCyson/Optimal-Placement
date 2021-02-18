@@ -38,7 +38,7 @@ class marketSimulation:
                 state[self.our_tick_idx] = self.n_ticks - 1 
             
             else:
-                if state[state[self.our_tick_idx]] < self.max_q - 1:
+                if state[state[self.our_tick_idx]] < self.n_ticks - 1:
                     state[state[self.our_tick_idx]] += 1 # Increase the size of the next tick
                     state[self.our_tick_idx] += 1        # Move up a tick
         
@@ -108,7 +108,7 @@ class marketSimulation:
             best-ask prices. For now, I will assume that arrivals  to each of the 
             ticks is identical. '''
         if (state[0:self.n_ticks * 2] < 0).any():
-            return None, None
+            return 0, np.argmin(state)
         if state is None:
             raise Exception('State is None')
         current_intensities = []
@@ -131,16 +131,16 @@ class marketSimulation:
             ''' since the intensities are symmetric, I calulate the intensities for 
                 just one side of the book. Once we determine which tick we will have
                 an arrival, we then `flip a coin' to see whether its on the buy/sell side '''
-            if (np.random.rand() > 0.5 and state[tick_idx + self.n_ticks - 1] != 0) or state[tick_idx] == 0 or state[tick_idx] == self.max_q-1:
-                tick_idx = tick_idx + self.n_ticks - 1 
+            if (np.random.rand() > 0.5 and state[tick_idx + self.n_ticks] != 0) or state[tick_idx] == 0 or state[tick_idx] == self.max_q - 1:
+                tick_idx = tick_idx + self.n_ticks 
             x = 0
     
             if check_valid:
                 while((state[tick_idx] == 0 and decision_idx != 0) or (state[tick_idx] == self.max_q-1 and decision_idx == 0)): 
                     decision_idx, tick_idx = self.simulate_market(state, both_sides=True, check_valid=False)
                     x += 1
-                    if x == 100:
-                        break
+                    if x == 1000:
+                        raise Exception("error")
             return decision_idx, tick_idx        
     
     def calc_reward(self, old_state, new_state, side='buy'):
@@ -150,7 +150,7 @@ class marketSimulation:
             elif old_state[self.shares_left_idx] - new_state[self.shares_left_idx] == 1 and (new_state[0:self.n_ticks * 2] < 0).any():
                 reward = self.n_ticks - old_state[self.our_tick_idx]
             elif old_state[self.shares_left_idx] - new_state[self.shares_left_idx] == 1:
-                reward = -0.5
+                reward = -1
             else:
                 reward = 0
         return reward
