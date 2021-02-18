@@ -54,7 +54,7 @@ intensity_values = intensity_values[intensity_values['Spread'] == 1]\
     .agg(dict(Limit='mean', Cancel='mean', Market='mean'))
 
 
-tuples = list(product(range(1, 10 + 1), repeat = 2))
+tuples = list(product(range(1, MAX_Q + 1), repeat = 2))
 intensity_values = intensity_values.loc[tuples]
 intensity_values.loc[(1,1), ['Cancel', 'Market']] = 1e-6
 #%%
