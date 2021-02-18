@@ -1,33 +1,6 @@
-import os
-import pandas as pd
 import numpy as np
-from agents import DQNAgent
-from itertools import product
+
 #%%
-DATA_PATH = os.path.join(os.getcwd(), 'datalibrary', 'data')
-N_TICKS = 2
-BOTH_SIDES = True
-TIME = 50
-N_SHARES = 100
-MAX_Q = 10
-
-file_name = "intensity-values.csv"
-intensity_values = pd.read_csv(os.path.join(DATA_PATH, file_name), index_col=[1,2])
-intensity_values = intensity_values[intensity_values['Spread'] == 1]\
-    .groupby(['BB size', 'BA size'])\
-    .agg(dict(Limit='mean', Cancel='mean', Market='mean'))
-
-
-tuples = list(product(range(1, MAX_Q + 1), repeat = 2))
-intensity_values = intensity_values.loc[tuples]
-intensity_values.loc[(1,1), ['Cancel', 'Market']] = 1e-6
-
-max_queue_size = MAX_Q
-#%%
-# Initialize an agent, this uses Keras with TensorFlow as a backend
-agent = DQNAgent(state_size=K * N_TICKS + 4, action_size=4)
-#%%
-
 ''' Inputs:
        - q_-N, ..., q_-1,...,q_1,...,q_N the queue size for the first N ticks
        - Our tick position          (index = N_TICKS + 1)
@@ -42,33 +15,13 @@ agent = DQNAgent(state_size=K * N_TICKS + 4, action_size=4)
        
 '''
 
-# Start with a random state
-# np.random.seed(420)
-if BOTH_SIDES:
-    K = 2
-else:
-    K = 1
+
 
 ''' If BOTH_SIDES = True, first N_TICKS is buy side, next N_TICKS is sell side,
     otherwise, for now, if BOTH_SIDES = False, we use the buy side only '''
 
-init_queue_size_vec = np.random.randint(0, max_queue_size, K * N_TICKS)
-init_tick_position = np.random.randint(0, K * N_TICKS) 
-print(init_tick_position)
-init_queue_position = np.random.randint(0, max(1,init_queue_size_vec[init_tick_position]))  
-
-
-init_state_vec = np.append(init_queue_size_vec, init_tick_position)
-init_state_vec = np.append(init_state_vec, init_queue_position)
-init_state_vec = np.append(init_state_vec, TIME)
-init_state_vec = np.append(init_state_vec, N_SHARES)
-
-our_tick_idx = K * N_TICKS                  
-our_pos_idx = K * N_TICKS + 1
-time_left_idx = K * N_TICKS + 2
-shares_left_idx = K * N_TICKS + 3
-
-def agent_state_update(state, action, max_q=MAX_Q):   
+def agent_state_update(state, action, n_ticks, our_tick_idx, our_pos_idx, 
+                       shares_left_idx, time_left_idx, max_q=10):   
     if state[shares_left_idx] <= 0:
         print('All shares have been sold.')
         return None 
@@ -88,8 +41,8 @@ def agent_state_update(state, action, max_q=MAX_Q):
         if state[our_tick_idx] == 0:
             state[shares_left_idx] -= 1     # We sell one share
             # We then move to the very last tick (this is just an arbitrary way to proceed)
-            state[N_TICKS-1] += 1
-            state[our_tick_idx] = N_TICKS
+            state[n_ticks-1] += 1
+            state[our_tick_idx] = n_ticks 
         
         else:
             state[state[our_tick_idx]] += 1 # Increase the size of the next tick
@@ -97,7 +50,7 @@ def agent_state_update(state, action, max_q=MAX_Q):
     
     elif action == 2:
         
-        if state[our_tick_idx] == N_TICKS-1:
+        if state[our_tick_idx] == n_ticks-1:
             return state 
         
         else:
@@ -111,13 +64,14 @@ def agent_state_update(state, action, max_q=MAX_Q):
         state[state[our_tick_idx]] -= 1     # Decrease the queue size of current tick
         state[shares_left_idx] -= 1         # We sell one share
         # We then move to the very last tick (this is just an arbitrary way to proceed)
-        if state[N_TICKS-1] != max_q -1:
-            state[N_TICKS-1] += 1
-        state[our_tick_idx] = N_TICKS
+        if state[n_ticks - 1] != max_q -1:
+            state[n_ticks - 1] += 1
+        state[our_tick_idx] = n_ticks
     
     return state
         
-def market_state_update(state, decision, tick, max_q=MAX_Q):
+def market_state_update(state, decision, tick,  n_ticks, our_tick_idx, our_pos_idx, 
+                       shares_left_idx, time_left_idx, max_q=10):
     if state[time_left_idx] <= 0:
         print('Out of time.')
         return None
@@ -140,12 +94,12 @@ def market_state_update(state, decision, tick, max_q=MAX_Q):
             else:
                 state[shares_left_idx] -= 1         # We sell one share
                 # We then move to the very last tick (this is just an arbitrary way to proceed)
-                if state[N_TICKS-1] != max_q -1:
-                    state[N_TICKS-1] += 1
-                state[our_tick_idx] = N_TICKS
+                if state[n_ticks - 1] != max_q -1:
+                    state[n_ticks - 1] += 1
+                state[our_tick_idx] = n_ticks
     return state
         
-def simulate_market(state, intensities, n_ticks, both_sides, max_q=MAX_Q, check_valid=True):
+def simulate_market(state, intensities, n_ticks, both_sides=True, max_q=10, check_valid=True):
     ''' For now, we are using the intensity values from Othmane's GitHub, but
         it appears to be for one tick on each side, namely, the best-bid and 
         best-ask prices. For now, I will assume that arrivals  to each of the 
@@ -160,7 +114,7 @@ def simulate_market(state, intensities, n_ticks, both_sides, max_q=MAX_Q, check_
                 # add 1, since we (Python) start counting at 0, but intensities starts at 1
                 BB_size, BA_size = queue_sizes[tick] + 1, queue_sizes[-(tick + 1)] + 1 
                 print(BB_size, BA_size)
-                intensity = list(intensity_values.loc[(BB_size, BA_size)])
+                intensity = list(intensities.loc[(BB_size, BA_size)])
                 current_intensities += intensity
         arrival_times = np.random.exponential(1/np.array(current_intensities))
         min_time_idx = arrival_times.argmin() 
@@ -190,28 +144,31 @@ def simulate_market(state, intensities, n_ticks, both_sides, max_q=MAX_Q, check_
                     break
         return decision_idx, tick_idx        
 
-def calc_reward(old_state, new_state, side='buy'):
+def calc_reward(old_state, new_state, n_ticks, our_tick_idx, shares_left_idx, 
+                time_left_idx, side='buy'):
     if side.lower() == 'buy':
         if new_state is None:
-            reward = old_state[shares_left_idx] * -0.5 
+            reward = old_state[shares_left_idx] * -2
         elif old_state[shares_left_idx] - new_state[shares_left_idx] == 1:
-            reward = N_TICKS - new_state[our_tick_idx]
+            reward = n_ticks - new_state[our_tick_idx]
         else:
             reward = 0
     return reward
 
-decisons = ['limit', 'cancel', 'market']
-new_state = init_state_vec
-for k in range(51):            
-    decision, tick = simulate_market(new_state, intensity_values, N_TICKS, True)
-    #print('decision', decisons[decision])
-    #print('tick', tick)
-    old_state = np.copy(new_state)
-    new_state = market_state_update(init_state_vec, decision, tick)
-    #print('Old state:', old_state)
-    #print('New state:', new_state)
-    reward = calc_reward(old_state, new_state)
-    print('Reward:', reward)
+
+#if __name__ == '__main':
+    #for k in range(51):    
+        #decisons = ['limit', 'cancel', 'market']
+        #new_state = init_state_vec        
+        #decision, tick = simulate_market(new_state, intensity_values, 2, True)
+        #print('decision', decisons[decision])
+        #print('tick', tick)
+        #old_state = np.copy(new_state)
+        #new_state = market_state_update(init_state_vec, decision, tick)
+        #print('Old state:', old_state)
+        #print('New state:', new_state)
+        #reward = calc_reward(old_state, new_state)
+        #print('Reward:', reward)
 
 
     
