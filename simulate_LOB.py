@@ -82,6 +82,10 @@ class marketSimulation:
         return state
             
     def market_state_update(self, state, decision, tick):
+        if state[self.shares_left_idx] <= 0:
+            #print('All shares have been sold.')
+            return None 
+        
         if state[self.time_left_idx] <= 0:
             #print('Out of time.')
             return None

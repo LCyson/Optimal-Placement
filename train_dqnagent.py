@@ -5,7 +5,7 @@ import os
 from itertools import product
 from agents import DQNAgent
 
-N_TICKS = 4
+N_TICKS = 3
 BOTH_SIDES = True
 TIME = 100
 N_SHARES = 5
