@@ -114,6 +114,9 @@ class marketSimulation:
             it appears to be for one tick on each side, namely, the best-bid and 
             best-ask prices. For now, I will assume that arrivals  to each of the 
             ticks is identical. '''
+            
+        if state is None:
+            raise Exception('State is None')
         current_intensities = []
         # For each tick we find the intensity values of the states
         if both_sides:
@@ -130,11 +133,10 @@ class marketSimulation:
             min_time_idx = arrival_times.argmin() 
             tick_idx = min_time_idx // 3
             decision_idx = min_time_idx % 3
-            
-            
+            print(queue_sizes)
             if (queue_sizes == np.zeros([1, self.n_ticks * 2])).all():
                 decision_idx = 0
-                tick_idx = np.random.randint(self.n_ticks * 2 + 1)
+                tick_idx = np.random.randint(self.n_ticks * 2)
             
             # since the intensities are symmetric, I calulate the intensities for 
             # just one side of the book. Once we determine which tick we will have

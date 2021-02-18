@@ -72,7 +72,7 @@ class DQNAgent:
             Q-table corresponding to the current chain of states. '''
         with self.tf_session.as_default():
             with self.tf_graph.as_default():
-                act_values = self.model.predict(state, steps=50)
+                act_values = self.model.predict(state)
         print("Q-table:")
         print(act_values[0])
         return [np.argmax(act_values[0]), act_values[0]]  # returns action and Q-table
@@ -84,12 +84,15 @@ class DQNAgent:
         with self.tf_session.as_default():
             with self.tf_graph.as_default():
                 for state, action, reward, next_state in minibatch:
+                    #print("next_state", next_state)
+                    #print("next state shape", np.array([next_state][0]).shape)
+                    #print("next state shape", np.array([next_state]).shape)
                     target = reward + self.gamma * \
-                        np.amax(self.model.predict(next_state)[0])
-                    target_f = self.model.predict(state)
+                        np.amax(self.model.predict(np.array([next_state])))
+                    target_f = self.model.predict(np.array([state]))
                     target_f[0][action] = target
                     self.model.fit(
-                        state,
+                        np.array([state]),
                         target_f,
                         epochs=1,
                         verbose=0,
