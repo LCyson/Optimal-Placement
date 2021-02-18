@@ -5,6 +5,25 @@ import os
 from itertools import product
 from agents import DQNAgent
 
+''' Inputs:
+       - q_-N, ..., q_-1,...,q_1,...,q_N the queue size for the first N ticks
+       - Our tick position          (index = N_TICKS + 1)
+       - Our position in the queue  (index = N_TICKS + 2)
+       - Time left to place orders  (index = N_TICKS + 3)
+       - N_SHARES - shares to place (index = N_TICKS + 4)
+    Action:
+       - (0) Nothing, stay in queue 
+       - (1) Increase 1 tick, if at tick 1 - market buy
+       - (2) Decrease 1 tick, if at last tick - stay in queue
+       - (3) Market buy 
+       
+'''
+
+
+
+''' If BOTH_SIDES = True, first N_TICKS is buy side, next N_TICKS is sell side,
+    otherwise, for now, if BOTH_SIDES = False, we use the buy side only '''
+
 N_TICKS = 3
 BOTH_SIDES = True
 TIME = 100

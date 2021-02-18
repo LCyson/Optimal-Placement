@@ -1,26 +1,6 @@
 import numpy as np
 
 #%%
-''' Inputs:
-       - q_-N, ..., q_-1,...,q_1,...,q_N the queue size for the first N ticks
-       - Our tick position          (index = N_TICKS + 1)
-       - Our position in the queue  (index = N_TICKS + 2)
-       - Time left to place orders  (index = N_TICKS + 3)
-       - N_SHARES - shares to place (index = N_TICKS + 4)
-    Action:
-       - (0) Nothing, stay in queue 
-       - (1) Increase 1 tick, if at tick 1 - market buy
-       - (2) Decrease 1 tick, if at last tick - stay in queue
-       - (3) Market buy 
-       
-'''
-
-
-
-''' If BOTH_SIDES = True, first N_TICKS is buy side, next N_TICKS is sell side,
-    otherwise, for now, if BOTH_SIDES = False, we use the buy side only '''
-
-
 class marketSimulation:
     def __init__(self, intensities, n_ticks, our_tick_idx, our_pos_idx, 
                  shares_left_idx, time_left_idx, max_q=10):
@@ -75,7 +55,8 @@ class marketSimulation:
                     state[state[self.our_tick_idx]] += 1 # Increase the size of the next tick
         
         elif action == 3:
-            state[state[self.our_tick_idx]] -= 1     # Decrease the queue size of current tick
+            if state[state[self.our_tick_idx]] > 0:
+                state[state[self.our_tick_idx]] -= 1     # Decrease the queue size of current tick
             state[self.shares_left_idx] -= 1         # We sell one share
             # We then move to the very first tick (this is just an arbitrary way to proceed)
             if state[self.n_ticks - 1] != self.max_q -1:
@@ -103,8 +84,10 @@ class marketSimulation:
         if decision in (1, 2):
             # decision 1 = cancel order
             # decision 2 = market order 
-            if state[tick] == 0:
+            if state[tick] == 0 and decision == 2:
                 raise Exception('Trying to do market/cancel order on empty queue.')
+            if state[tick] == -1:
+                raise Exception('error')
             state[tick] -= 1
             if state[self.our_tick_idx] == tick:
                 if state[self.our_pos_idx] != 0:
@@ -168,9 +151,9 @@ class marketSimulation:
     def calc_reward(self, old_state, new_state, side='buy'):
         if side.lower() == 'buy':
             if new_state is None:
-                reward = old_state[self.shares_left_idx] * -2
-            elif old_state[self.shares_left_idx] - new_state[self.shares_left_idx] == 1:
-                reward = self.n_ticks - old_state[self.our_tick_idx] - 1
+                reward = old_state[self.shares_left_idx] * -1
+            elif old_state[self.shares_left_idx] - new_state[self.shares_left_idx] == 1 and (new_state[0:self.n_ticks * 2] < 0).any():
+                reward = self.n_ticks - old_state[self.our_tick_idx]
             else:
                 reward = 0
         return reward
