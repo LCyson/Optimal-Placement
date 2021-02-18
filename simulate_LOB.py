@@ -52,7 +52,8 @@ class marketSimulation:
             if state[self.our_tick_idx] == 0:
                 state[self.shares_left_idx] -= 1     # We sell one share
                 # We then move to the very last tick (this is just an arbitrary way to proceed)
-                state[self.n_ticks-1] += 1
+                if state[self.n_ticks - 1] < self.max_q -1:
+                    state[self.n_ticks - 1] += 1
                 state[self.our_tick_idx] = self.n_ticks 
             
             else:
@@ -61,14 +62,14 @@ class marketSimulation:
         
         elif action == 2:
             
-            if state[self.our_tick_idx] == self.n_ticks-1:
+            if state[self.our_tick_idx] == self.n_ticks - 1:
                 return state 
             
             else:
                 state[state[self.our_tick_idx]] -= 1 # Decrease the queue size of current tick
-                
-                state[self.our_tick_idx] += 1        # Move back a tick
-                if state [state[self.our_tick_idx]] != self.max_q -1 :
+                if state[self.our_tick_idx] < self.n_ticks:
+                    state[self.our_tick_idx] += 1        # Moveup a tick
+                if state[state[self.our_tick_idx]] < self.n_ticks :
                     state[state[self.our_tick_idx]] += 1 # Increase the size of the next tick
         
         elif action == 3:
@@ -93,9 +94,10 @@ class marketSimulation:
         state[self.time_left_idx] -= 1  # subtract unit of time
         if decision == 0:
             # decision 0 = limit order insertion
-            state[tick] += 1
-            if state[self.our_tick_idx] == tick:
-                state[self.our_pos_idx] += 1
+            if state[tick] < self.max_q - 1:
+                state[tick] += 1
+            #if state[self.our_tick_idx] == tick:
+                #state[self.our_pos_idx] += 1
         if decision in (1, 2):
             # decision 1 = cancel order
             # decision 2 = market order 
@@ -108,7 +110,7 @@ class marketSimulation:
                 else:
                     state[self.shares_left_idx] -= 1         # We sell one share
                     # We then move to the very last tick (this is just an arbitrary way to proceed)
-                    if state[self.n_ticks - 1] != self.max_q -1:
+                    if state[self.n_ticks - 1] < self.max_q -1:
                         state[self.n_ticks - 1] += 1
                     state[self.our_tick_idx] = self.n_ticks
         return state
@@ -118,7 +120,8 @@ class marketSimulation:
             it appears to be for one tick on each side, namely, the best-bid and 
             best-ask prices. For now, I will assume that arrivals  to each of the 
             ticks is identical. '''
-            
+        if (state[0:self.n_ticks * 2] < 0).any():
+            return None, None
         if state is None:
             raise Exception('State is None')
         current_intensities = []
@@ -145,7 +148,7 @@ class marketSimulation:
             # since the intensities are symmetric, I calulate the intensities for 
             # just one side of the book. Once we determine which tick we will have
             # an arrival, we then `flip a coin' to see whether its on the buy/sell side
-            if (np.random.rand() > 0.5 and state[tick_idx + self.n_ticks] != 0) or state[tick_idx] == 0 or state[tick_idx] == self.max_q:
+            if (np.random.rand() > 0.5 and state[tick_idx + self.n_ticks] != 0) or state[tick_idx] == 0 or state[tick_idx] == self.max_q-1:
                 #if state[tick_idx + n_ticks] == 0 and decision_idx:
                 #    decision_idx = 0             cc
                 #elif state[tick_idx + n_ticks] == max_q - 1:
