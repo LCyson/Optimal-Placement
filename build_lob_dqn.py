@@ -8,7 +8,6 @@ import datetime as dt
 import matplotlib.pyplot as plt
 import keras
 
-
 ITCH_STORE = 'datalibrary/data/itch.h5'
 ORDER_BOOK_STORE = 'order_book.h5'
 STOCK = 'TSLA'
@@ -105,18 +104,28 @@ def save_orders(stock, orders, append=False):
                 store.put(key, df.set_index('timestamp'))
 
 
-def sort_order_book(bid_side, ask_side):
-    return
-
-
 def generate_state(sorted_ask_side, sorted_bid_side, tick_idx, queue_idx, time_left, share_left):
-    bid_side_queue = [min(int(number / AES), 1) for _, number in sorted_bid_side]
-    ask_side_queue = [min(int(number / AES), 1) for _, number in sorted_ask_side]
-    normalized_time_left = int(100*time_left / (20*1e6))
+    bid_side_queue = [max(int(number / AES), 1) for _, number in sorted_bid_side]
+    ask_side_queue = [max(int(number / AES), 1) for _, number in sorted_ask_side]
+    normalized_time_left = int(100 * time_left / (20 * 1e6))
 
-    new_state = np.concatenate((bid_side_queue, ask_side_queue, [tick_idx], [queue_idx], [normalized_time_left], [share_left]))
+    new_state = np.concatenate(
+        (bid_side_queue[-3:], ask_side_queue[-3:], [tick_idx], [queue_idx], [normalized_time_left], [share_left]))
 
+    print("generating new state", new_state)
     return new_state
+
+
+def find_current_position(limit_order_price, sorted_bid_side):
+    new_tick_pos = -1
+
+    for idx, order in enumerate(reversed(sorted_bid_side)):
+        if order[0] == limit_order_price:
+            new_tick_pos = idx
+            break
+
+    assert (new_tick_pos != -1)
+    return new_tick_pos
 
 
 order_book = {-1: {}, 1: {}}
@@ -128,10 +137,10 @@ nlevels = 100
 start = time()
 placement_start_time = 40000023941.0 + 7200 * 1e6
 limit_order_price = 0
-AES = 50
+AES = 20
 tick_pos = 0
 queue_pos = 0
-time_left = 20 * 1e6
+time_left = 200 * 1e6
 order_number = 1000
 
 # init metric variables
@@ -165,12 +174,7 @@ for message in messages.itertuples():
         current_orders[buysell].update({price: shares})
         current_orders[buysell], new_order = add_orders(current_orders[buysell], buysell, nlevels)
         order_book[buysell][message.timestamp] = new_order
-        # t_sleep.sleep(3)
-        # print("orderbook A: ", order_book)
     elif message.type in ['E', 'C', 'X', 'D', 'U']:
-
-        # t_sleep.sleep(3)
-        # print("orderbook ECX: ", order_book)
         if message.type == 'U':
             if not np.isnan(message.shares_replaced):
                 price = int(message.price_replaced)
@@ -181,6 +185,10 @@ for message in messages.itertuples():
                 shares = -int(message.shares)
 
         if price is not None:
+            if price == limit_order_price and (message.type == 'D' or message.type == 'U' or message.type == 'X'):
+                print("Historical order is cancelled/replaced/deleted")
+                limit_order_price = 0
+
             current_orders[buysell].update({price: shares})
             if current_orders[buysell][price] <= 0:
                 current_orders[buysell].pop(price)
@@ -192,18 +200,18 @@ for message in messages.itertuples():
                 optimal_order_price = price
 
             # adjust bb pos and bb size accordingly, or execute the order
-            # if price == limit_order_price and message.type != 'D':
-            #     if (message.shares >= bb_pos - 1):
-            #         print("Execute our limit order at price", price)
-            #         print("Execute at time:", message.timestamp)
-            #         limit_buy_prices.append(price)
-            #         optimal_order_price = min(optimal_order_price, price)
-            #         buy_price_distances.append(optimal_order_price - price)
-            #         limit_order_price = 0
-            #         order_placement_time = current_time
-            #         order_number -= 1
-            #     else:
-            #         bb_pos -= message.shares
+            if price == limit_order_price and message.type != 'D':
+                # if (message.shares >= queue_pos - 1):
+                print("Execute our limit order at price", price)
+                print("Execute at time:", message.timestamp)
+                limit_buy_prices.append(price)
+                optimal_order_price = min(optimal_order_price, price)
+                buy_price_distances.append(optimal_order_price - price)
+                limit_order_price = 0
+                order_placement_time = current_time
+                order_number -= 1
+                # else:
+                #     queue_pos -= message.shares
     else:
         continue
 
@@ -214,42 +222,64 @@ for message in messages.itertuples():
         sorted_ask_side = sorted(current_orders[-1].items(), reverse=True)
         sorted_bid_side = sorted(current_orders[1].items())
 
+        # reset order state each time we execute or cancel an order
         if limit_order_price == 0:
             print("init limit order price")
             limit_order_price = sorted_bid_side[-1][0]
             order_placement_time = current_time
             optimal_order_price = limit_order_price
-            tick_pos = len(sorted_bid_side) - 1
-            queue_pos = np.random.randint(0, sorted_bid_side[-1][1] - 1)
-
+            time_left = 200 * 1e6
+            tick_pos = 0
+            queue_pos = np.random.randint(0, max(1, sorted_bid_side[-1][1] - 1))
         else:
-            state = generate_state(sorted_ask_side, sorted_bid_side, tick_pos, queue_pos, time_left, 1)
-            action = agent.model.predict(np.array([state]))
+            new_tick_pos = find_current_position(limit_order_price, sorted_bid_side)
 
+            state = generate_state(sorted_ask_side, sorted_bid_side, new_tick_pos, queue_pos, time_left, 1)
+            actions = agent.model.predict(np.array([state]))
+            action = np.where(actions[0] == np.max(actions[0]))[0][0]
+            print(sorted_ask_side)
+            print(sorted_bid_side)
+            print(actions)
+            print(action)
+            print(new_tick_pos)
+            print(limit_order_price)
+
+            # take action according to DQN action result
+            #    - (0) Nothing, stay in queue
+            #    - (1) Increase 1 tick, if at tick 1 - market buy
+            #    - (2) Decrease 1 tick, if at last tick - stay in queue
+            #    - (3) Market buy
+            if action == 3 or (action == 1 and tick_pos == 0):
+                market_order_price = sorted_ask_side[-1][0]
+                print("Execute our market order at price", market_order_price)
+                print("Execute at time:", float(dt.datetime.strftime(message.timestamp, '%H%M%S%f')))
+                limit_buy_prices.append(market_order_price)
+                optimal_order_price = min(optimal_order_price, price)
+                buy_price_distances.append(optimal_order_price - market_order_price)
+                limit_order_price = 0
+                order_number -= 1
+            elif action == 2:
+                if tick_pos != 2:
+                    limit_order_price = sorted_bid_side[-tick_pos - 2][0]
+                    tick_pos += 1
+                    queue_pos = np.random.randint(0, sorted_bid_side[-tick_pos-1][1] - 1)
+            elif action == 1:
+                limit_order_price = sorted_bid_side[-tick_pos + 1][0]
+                tick_pos -= 1
+                queue_pos = np.random.randint(0, sorted_bid_side[-tick_pos-1][1] - 1)
+
+
+        # early exit if all orders have been executed
         if order_number == 0:
             print("Execute all buy orders")
             break
-
-        # if current_time - order_placement_time >= wait_time:
-        #     print("Execute our market order at price", ba_order[0])
-        #     print("Execute at time:", float(dt.datetime.strftime(message.timestamp, '%H%M%S%f')))
-        #     limit_buy_prices.append(ba_order[0])
-        #     optimal_order_price = min(optimal_order_price, price)
-        #     buy_price_distances.append(optimal_order_price - ba_order[0])
-        #     limit_order_price = 0
-        #     order_number -= 1
 
         t_sleep.sleep(1)
 
 print("Finish simulating!")
 
-plt.plot(np.array(limit_buy_prices), 'r')
-plt.savefig('plot/limit_buy_prices_dqn.png')
-plt.close()
-
-plt.plot(np.array(buy_price_distances), 'r')
-plt.savefig('plot/buy_price_distances_dqn.png')
-plt.close()
+np.save('limit_buy_prices_save.npy', limit_buy_prices)
+np.save('buy_price_distances_save.npy', buy_price_distances)
 
 print("Average of buy_price_distances is", np.mean(buy_price_distances))
 print("Median of buy_price_distances is", np.median(buy_price_distances))
