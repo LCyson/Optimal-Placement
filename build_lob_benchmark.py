@@ -20,7 +20,7 @@ trade_summary = trades.groupby('stock').value_share.sum().sort_values(ascending=
 order_dict = {-1: 'sell', 1: 'buy'}
 
 
-# %%
+#%%
 def get_messages(date, stock):
     """Collect trading messages for given stock"""
     with pd.HDFStore(ITCH_STORE) as store:

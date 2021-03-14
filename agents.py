@@ -8,13 +8,13 @@ class DQNAgent:
                  state_size,
                  action_size,
                  memory=50,
-                 gamma=0.95,
+                 gamma=0.99,
                  epsilon=0.5,
                  epsilon_min=0.0001,
-                 epsilon_decay=0.9998,
-                 lr=0.001,
-                 neurons=(32, 32),
-                 activation=('relu', 'relu'),
+                 epsilon_decay=0.99999,
+                 lr=0.00001,
+                 neurons=(64, 64, 64),
+                 activation=('relu', 'relu', 'relu'),
                  ):
         from keras import backend as K
         import tensorflow as tf
