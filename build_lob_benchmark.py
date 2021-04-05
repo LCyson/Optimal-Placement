@@ -12,7 +12,7 @@ STOCK = 'TSLA'
 
 with pd.HDFStore(ITCH_STORE) as store:
     stocks = store['R'].loc[:, ['stock_locate', 'stock']]
-    trades = store['P'].append(store['Q'].rename(columns={'cross_price': 'price'}), sort=False).merge(stocks)
+    trades = store['P'].append(store['Q'].rename(columns={'cross_price': 'price'})).merge(stocks)
 trades['value'] = trades.shares.mul(trades.price)
 trades['value_share'] = trades.value.div(trades.value.sum())
 trade_summary = trades.groupby('stock').value_share.sum().sort_values(ascending=False)
@@ -34,7 +34,7 @@ def get_messages(date, stock):
             data[m] = store.select(m, where=target).drop('stock_locate', axis=1).assign(type=m)
 
     order_cols = ['order_reference_number', 'buy_sell_indicator', 'shares', 'price']
-    orders = pd.concat([data['A'], data['F']], sort=False, ignore_index=True).loc[:, order_cols]
+    orders = pd.concat([data['A'], data['F']], ignore_index=True).loc[:, order_cols]
 
     for m in messages[2: -3]:
         data[m] = data[m].merge(orders, how='left')
@@ -48,7 +48,7 @@ def get_messages(date, stock):
     data['X']['shares'] = data['X']['cancelled_shares']
     data['X'] = data['X'].dropna(subset=['price'])
 
-    data = pd.concat([data[m] for m in messages], ignore_index=True, sort=False)
+    data = pd.concat([data[m] for m in messages], ignore_index=True)
     data['date'] = pd.to_datetime(date, format='%m%d%Y')
     data.timestamp = data['date'].add(data.timestamp)
     data = data[data.printable != 0]
@@ -67,7 +67,7 @@ def get_trades(m):
                         m.loc[m.type == 'C', cols + ['execution_price']].rename(columns=trade_dict),
                         m.loc[m.type == 'P', ['timestamp', 'price', 'shares']],
                         m.loc[m.type == 'Q', ['timestamp', 'price', 'shares']].assign(cross=1),
-                        ], sort=False).dropna(subset=['price']).fillna(0)
+                        ]).dropna(subset=['price']).fillna(0)
     return trades.set_index('timestamp').sort_index().astype(int)
 
 
@@ -121,7 +121,8 @@ bb_pos = 0
 bb_size = 0
 AES = 50
 wait_time = 20 * 1e6
-order_number = 1000
+preset_order_number = 1000
+order_number = preset_order_number
 
 limit_order_book = dict()
 
@@ -174,6 +175,10 @@ for message in messages.itertuples():
                 shares = -int(message.shares)
 
         if price is not None:
+            if price == limit_order_price and (message.type == 'D' or message.type == 'U' or message.type == 'X'):
+                print("Historical order is cancelled/replaced/deleted")
+                limit_order_price = 0
+
             current_orders[buysell].update({price: shares})
             if current_orders[buysell][price] <= 0:
                 current_orders[buysell].pop(price)
@@ -190,8 +195,7 @@ for message in messages.itertuples():
                     print("Execute our limit order at price", price)
                     print("Execute at time:", message.timestamp)
                     limit_buy_prices.append(price)
-                    optimal_order_price = min(optimal_order_price, price)
-                    buy_price_distances.append(optimal_order_price - price)
+                    buy_price_distances.append(price - optimal_order_price)
                     limit_order_price = 0
                     order_placement_time = current_time
                     order_number -= 1
@@ -216,6 +220,8 @@ for message in messages.itertuples():
             optimal_order_price = limit_order_price
 
             bb_pos = int(bb_order[1] / AES) + 1
+        else:
+            optimal_order_price = min(optimal_order_price, sorted_ask_side[-1][0])
 
         if order_number == 0:
             break
@@ -224,8 +230,7 @@ for message in messages.itertuples():
             print("Execute our market order at price", ba_order[0])
             print("Execute at time:", float(dt.datetime.strftime(message.timestamp, '%H%M%S%f')))
             limit_buy_prices.append(ba_order[0])
-            optimal_order_price = min(optimal_order_price, price)
-            buy_price_distances.append(optimal_order_price - ba_order[0])
+            buy_price_distances.append(ba_order[0] - optimal_order_price)
             limit_order_price = 0
             order_number -= 1
 
@@ -234,13 +239,16 @@ for message in messages.itertuples():
 
 print("Finish simulating!")
 
-plt.plot(np.array(limit_buy_prices), 'r')
-plt.savefig('plot/limit_buy_prices.png')
-plt.close()
+# plt.plot(np.array(limit_buy_prices), 'r')
+# plt.savefig('plot/limit_buy_prices.png')
+# plt.close()
+#
+# plt.plot(np.array(buy_price_distances), 'r')
+# plt.savefig('plot/buy_price_distances.png')
+# plt.close()
 
-plt.plot(np.array(buy_price_distances), 'r')
-plt.savefig('plot/buy_price_distances.png')
-plt.close()
+np.save('data/order#{}_benchmark_limit_buy_prices_save.npy'.format(preset_order_number), limit_buy_prices)
+np.save('data/order#{}_benchmark_buy_price_distances_save.npy'.format(preset_order_number), buy_price_distances)
 
 print("Average of buy_price_distances is", np.mean(buy_price_distances))
 print("Median of buy_price_distances is", np.median(buy_price_distances))

@@ -119,3 +119,5 @@ for k in range(ROUNDS):
    # agent learns from old states by remembering and replaying them
    if r > 32:
        agent.replay(32)
+
+agent.save("trail-dqn.model")

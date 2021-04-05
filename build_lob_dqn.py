@@ -11,6 +11,7 @@ import keras
 ITCH_STORE = 'datalibrary/data/itch.h5'
 ORDER_BOOK_STORE = 'order_book.h5'
 STOCK = 'TSLA'
+DATE = '07302019'
 
 with pd.HDFStore(ITCH_STORE) as store:
     stocks = store['R'].loc[:, ['stock_locate', 'stock']]
@@ -110,9 +111,8 @@ def generate_state(sorted_ask_side, sorted_bid_side, tick_idx, queue_idx, time_l
     normalized_time_left = int(100 * time_left / (20 * 1e6))
 
     new_state = np.concatenate(
-        (bid_side_queue[-3:], ask_side_queue[-3:], [tick_idx], [queue_idx], [normalized_time_left], [share_left]))
+        (bid_side_queue[-3:], ask_side_queue[-3:], [tick_idx], [queue_idx/AES], [normalized_time_left], [share_left]))
 
-    print("generating new state", new_state)
     return new_state
 
 
@@ -140,8 +140,9 @@ limit_order_price = 0
 AES = 20
 tick_pos = 0
 queue_pos = 0
-time_left = 200 * 1e6
-order_number = 1000
+time_left = 20 * 1e6
+preset_order_number = 1000
+order_number = preset_order_number
 
 # init metric variables
 n_units = 10
@@ -150,9 +151,10 @@ buy_price_distances = []
 order_placement_time = 0
 optimal_order_price = 0
 
-agent = keras.models.load_model("dqn-model")
+model_name = "xingchen-dqn.model"
+agent = keras.models.load_model(model_name)
 
-messages = get_messages(date='07302019', stock=STOCK)
+messages = get_messages(date=DATE, stock=STOCK)
 for message in messages.itertuples():
     i = message[0]
     if i % 1e5 == 0 and i > 0:
@@ -196,20 +198,20 @@ for message in messages.itertuples():
 
             # record the lowest order price during a placement period
             if optimal_order_price > price and (message.type == 'E' or message.type == 'C'):
-                print("optimal_order_price", "price", optimal_order_price, price)
+                # print("optimal_order_price", "price", optimal_order_price, price)
                 optimal_order_price = price
 
             # adjust bb pos and bb size accordingly, or execute the order
             if price == limit_order_price and message.type != 'D':
                 # if (message.shares >= queue_pos - 1):
-                print("Execute our limit order at price", price)
-                print("Execute at time:", message.timestamp)
                 limit_buy_prices.append(price)
-                optimal_order_price = min(optimal_order_price, price)
-                buy_price_distances.append(optimal_order_price - price)
+                buy_price_distances.append(price - optimal_order_price)
                 limit_order_price = 0
                 order_placement_time = current_time
                 order_number -= 1
+                print("Execute our limit order at price", price)
+                print("Optimal price during the period", optimal_order_price)
+                print("Execute at time:", message.timestamp)
                 # else:
                 #     queue_pos -= message.shares
     else:
@@ -228,21 +230,25 @@ for message in messages.itertuples():
             limit_order_price = sorted_bid_side[-1][0]
             order_placement_time = current_time
             optimal_order_price = limit_order_price
-            time_left = 200 * 1e6
+            time_left = 20 * 1e6
             tick_pos = 0
             queue_pos = np.random.randint(0, max(1, sorted_bid_side[-1][1] - 1))
         else:
+            optimal_order_price = min(optimal_order_price, sorted_ask_side[-1][0])
             new_tick_pos = find_current_position(limit_order_price, sorted_bid_side)
 
             state = generate_state(sorted_ask_side, sorted_bid_side, new_tick_pos, queue_pos, time_left, 1)
             actions = agent.model.predict(np.array([state]))
             action = np.where(actions[0] == np.max(actions[0]))[0][0]
-            print(sorted_ask_side)
-            print(sorted_bid_side)
-            print(actions)
-            print(action)
-            print(new_tick_pos)
-            print(limit_order_price)
+            # print(sorted_ask_side[-3:])
+            # print(sorted_bid_side[-3:])
+            # print("actions", actions)
+            # print("action", action)
+            # print("new_tick pos", new_tick_pos)
+            # print("current order price", limit_order_price)
+            # print("current time", current_time)
+            # print("order time", order_placement_time)
+            # print("\n")
 
             # take action according to DQN action result
             #    - (0) Nothing, stay in queue
@@ -251,22 +257,22 @@ for message in messages.itertuples():
             #    - (3) Market buy
             if action == 3 or (action == 1 and tick_pos == 0):
                 market_order_price = sorted_ask_side[-1][0]
-                print("Execute our market order at price", market_order_price)
-                print("Execute at time:", float(dt.datetime.strftime(message.timestamp, '%H%M%S%f')))
                 limit_buy_prices.append(market_order_price)
-                optimal_order_price = min(optimal_order_price, price)
-                buy_price_distances.append(optimal_order_price - market_order_price)
+                buy_price_distances.append(market_order_price - optimal_order_price)
                 limit_order_price = 0
                 order_number -= 1
+                print("Execute our market order at price", market_order_price)
+                print("Execute at time:", float(dt.datetime.strftime(message.timestamp, '%H%M%S%f')))
+                print("Optimal price during the period", optimal_order_price)
             elif action == 2:
-                if tick_pos != 2:
+                if tick_pos <= 2:
                     limit_order_price = sorted_bid_side[-tick_pos - 2][0]
                     tick_pos += 1
-                    queue_pos = np.random.randint(0, sorted_bid_side[-tick_pos-1][1] - 1)
+                    queue_pos = np.random.randint(0, max(sorted_bid_side[-tick_pos-1][1] - 1, 1))
             elif action == 1:
                 limit_order_price = sorted_bid_side[-tick_pos + 1][0]
                 tick_pos -= 1
-                queue_pos = np.random.randint(0, sorted_bid_side[-tick_pos-1][1] - 1)
+                queue_pos = np.random.randint(0, max(sorted_bid_side[-tick_pos-1][1] - 1, 1))
 
 
         # early exit if all orders have been executed
@@ -274,12 +280,12 @@ for message in messages.itertuples():
             print("Execute all buy orders")
             break
 
-        t_sleep.sleep(1)
+        # t_sleep.sleep(.5)
 
 print("Finish simulating!")
 
-np.save('limit_buy_prices_save.npy', limit_buy_prices)
-np.save('buy_price_distances_save.npy', buy_price_distances)
+np.save('data/{}_order#{}_limit_buy_prices_save.npy'.format(model_name, preset_order_number), limit_buy_prices)
+np.save('data/{}_order#{}_buy_price_distances_save.npy'.format(model_name, preset_order_number), buy_price_distances)
 
 print("Average of buy_price_distances is", np.mean(buy_price_distances))
 print("Median of buy_price_distances is", np.median(buy_price_distances))

@@ -100,3 +100,6 @@ class DQNAgent:
                         )
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
+
+    def save(self, path):
+        self.model.save(path)

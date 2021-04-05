@@ -222,7 +222,7 @@ class marketSimulation:
             elif old_state[self.shares_left_idx] - new_state[self.shares_left_idx] == 1:
                 reward = -1
             else:
-                reward = -.05
+                reward = -.01
         return reward
      
 if __name__ == "__main__":
