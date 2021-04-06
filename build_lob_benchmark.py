@@ -121,25 +121,23 @@ bb_pos = 0
 bb_size = 0
 AES = 50
 wait_time = 20 * 1e6
-preset_order_number = 1000
+preset_order_number = 300
 order_number = preset_order_number
 
 limit_order_book = dict()
 
 
-def translate_state(oders, aes):
-    return
-
-
 n_units = 10
-limit_buy_prices = []
-buy_price_distances = []
+limit_buy_prices_save = []
+buy_price_distances_save = []
+execution_time_save = []
 units_placed = 0
 i_last_sale = 0
 order_placement_time = 0
 optimal_order_price = 0
 for message in messages.itertuples():
     i = message[0]
+    current_time = float(dt.datetime.strftime(message.timestamp, '%H%M%S%f'))
     if i % 1e5 == 0 and i > 0:
         print('{:,.0f}\t\t{}'.format(i, timedelta(seconds=time() - start)))
         # save_orders(STOCK, order_book, append=True)
@@ -194,8 +192,9 @@ for message in messages.itertuples():
                 if (message.shares >= bb_pos - 1):
                     print("Execute our limit order at price", price)
                     print("Execute at time:", message.timestamp)
-                    limit_buy_prices.append(price)
-                    buy_price_distances.append(price - optimal_order_price)
+                    limit_buy_prices_save.append(price)
+                    buy_price_distances_save.append(price - optimal_order_price)
+                    execution_time_save.append(current_time - order_placement_time)
                     limit_order_price = 0
                     order_placement_time = current_time
                     order_number -= 1
@@ -205,7 +204,6 @@ for message in messages.itertuples():
         continue
 
     # start placing order
-    current_time = float(dt.datetime.strftime(message.timestamp, '%H%M%S%f'))
     if (current_time - ticker) >= 0:
         sorted_ask_side = sorted(current_orders[-1].items())
         sorted_bid_side = sorted(current_orders[1].items(), reverse=True)
@@ -229,8 +227,9 @@ for message in messages.itertuples():
         if current_time - order_placement_time >= wait_time:
             print("Execute our market order at price", ba_order[0])
             print("Execute at time:", float(dt.datetime.strftime(message.timestamp, '%H%M%S%f')))
-            limit_buy_prices.append(ba_order[0])
-            buy_price_distances.append(ba_order[0] - optimal_order_price)
+            limit_buy_prices_save.append(ba_order[0])
+            buy_price_distances_save.append(ba_order[0] - optimal_order_price)
+            execution_time_save.append(current_time - order_placement_time)
             limit_order_price = 0
             order_number -= 1
 
@@ -247,9 +246,12 @@ print("Finish simulating!")
 # plt.savefig('plot/buy_price_distances.png')
 # plt.close()
 
-np.save('data/order#{}_benchmark_limit_buy_prices_save.npy'.format(preset_order_number), limit_buy_prices)
-np.save('data/order#{}_benchmark_buy_price_distances_save.npy'.format(preset_order_number), buy_price_distances)
+np.save('data/order#{}_benchmark_limit_buy_prices_save.npy'.format(preset_order_number), limit_buy_prices_save)
+np.save('data/order#{}_benchmark_buy_price_distances_save.npy'.format(preset_order_number), buy_price_distances_save)
+np.save('data/order#{}_benchmark_execution_time_save.npy'.format(preset_order_number), execution_time_save)
 
-print("Average of buy_price_distances is", np.mean(buy_price_distances))
-print("Median of buy_price_distances is", np.median(buy_price_distances))
-print("Standard Deviation of buy_price_distances is ", np.std(buy_price_distances))
+print("Average of buy_price_distances is", np.mean(buy_price_distances_save))
+print("Median of buy_price_distances is", np.median(buy_price_distances_save))
+print("Standard Deviation of buy_price_distances is ", np.std(buy_price_distances_save))
+print("Average execution time is ", np.mean(execution_time_save))
+print("Total execution time is ", np.sum(execution_time_save))

@@ -6,7 +6,8 @@ from time import time
 import time as t_sleep
 import datetime as dt
 import matplotlib.pyplot as plt
-import keras
+import q_table
+
 
 ITCH_STORE = 'datalibrary/data/itch.h5'
 ORDER_BOOK_STORE = 'order_book.h5'
@@ -105,19 +106,9 @@ def save_orders(stock, orders, append=False):
                 store.put(key, df.set_index('timestamp'))
 
 
-def generate_state(sorted_ask_side, sorted_bid_side, tick_idx, queue_idx, time_left, share_left):
-    bid_side_queue = [max(int(number / AES), 1) for _, number in sorted_bid_side]
-    ask_side_queue = [max(int(number / AES), 1) for _, number in sorted_ask_side]
-    normalized_time_left = int(100 * time_left / (20 * 1e6))
-
-    new_state = np.concatenate(
-        (bid_side_queue[-3:], ask_side_queue[-3:], [tick_idx], [queue_idx/AES], [normalized_time_left], [share_left]))
-
-    return new_state
-
-
 def find_current_position(limit_order_price, sorted_bid_side):
     new_tick_pos = -1
+    bb_size = 0
 
     for idx, order in enumerate(reversed(sorted_bid_side)):
         if order[0] == limit_order_price:
@@ -125,7 +116,11 @@ def find_current_position(limit_order_price, sorted_bid_side):
             break
 
     assert (new_tick_pos != -1)
-    return new_tick_pos
+
+    for order in sorted_bid_side:
+        bb_size += order[1]
+
+    return new_tick_pos, bb_size/AES
 
 
 order_book = {-1: {}, 1: {}}
@@ -143,6 +138,7 @@ queue_pos = 0
 time_left = 20 * 1e6
 preset_order_number = 10
 order_number = preset_order_number
+market_order_at_the_end = True
 
 # init metric variables
 n_units = 10
@@ -151,15 +147,11 @@ buy_price_distances_save = []
 execution_time_save = []
 order_placement_time = 0
 optimal_order_price = 0
-market_order_at_the_end = True
-
-model_name = "xingchen-dqn.model"
-agent = keras.models.load_model(model_name)
 
 messages = get_messages(date=DATE, stock=STOCK)
 for message in messages.itertuples():
-    i = message[0]
     current_time = float(dt.datetime.strftime(message.timestamp, '%H%M%S%f'))
+    i = message[0]
     if i % 1e5 == 0 and i > 0:
         print('{:,.0f}\t\t{}'.format(i, timedelta(seconds=time() - start)))
         # save_orders(STOCK, order_book, append=True)
@@ -216,6 +208,8 @@ for message in messages.itertuples():
                 print("Execute our limit order at price", price)
                 print("Optimal price during the period", optimal_order_price)
                 print("Execute at time:", message.timestamp)
+                # else:
+                #     queue_pos -= message.shares
     else:
         continue
 
@@ -236,38 +230,20 @@ for message in messages.itertuples():
             queue_pos = np.random.randint(0, max(1, sorted_bid_side[-1][1] - 1))
         else:
             optimal_order_price = min(optimal_order_price, sorted_ask_side[-1][0])
-            new_tick_pos = find_current_position(limit_order_price, sorted_bid_side)
 
-            state = generate_state(sorted_ask_side, sorted_bid_side, new_tick_pos, queue_pos, time_left, 1)
-            actions = agent.model.predict(np.array([state]))
-            action = np.where(actions[0] == np.max(actions[0]))[0][0]
-            # print(sorted_ask_side[-3:])
-            # print(sorted_bid_side[-3:])
-            # print("actions", actions)
-            # print("action", action)
-            # print("new_tick pos", new_tick_pos)
-            # print("current order price", limit_order_price)
-            # print("current time", current_time)
-            # print("order time", order_placement_time)
-            # print("\n")
+            # take action according to the Q-table
+            #    0. Replace current order with a market if mkt score is bigger than stay score
+            #    1. Do nothing otherwise
+            bb_pos, bb_size = find_current_position(limit_order_price, sorted_bid_side)
+            stay_score = q_table.h_Stay[min(bb_size, 38)][min(bb_pos, 38)]
+            market_score = q_table.h_Mkt[min(bb_size, 38)][min(bb_pos, 38)]
+            action = 0 if stay_score >= market_score else 1
+            # print("bb_pos", bb_pos)
+            # print("bb_size", bb_size)
+            # print("stay vs market", stay_score, market_score)
+            # print(action, "\n")
 
-            # execute market order if exceeds time limit
-            if market_order_at_the_end and time_left <= 0:
-                market_order_price = sorted_ask_side[-1][0]
-                print("Timeout! Execute our market order at price", market_order_price)
-                print("Execute at time:", float(dt.datetime.strftime(message.timestamp, '%H%M%S%f')))
-                limit_buy_prices_save.append(market_order_price)
-                buy_price_distances_save.append(market_order_price - optimal_order_price)
-                execution_time_save.append(current_time - order_placement_time)
-                limit_order_price = 0
-                order_number -= 1
-
-            # take action according to DQN action result
-            #    - (0) Nothing, stay in queue
-            #    - (1) Increase 1 tick, if at tick 1 - market buy
-            #    - (2) Decrease 1 tick, if at last tick - stay in queue
-            #    - (3) Market buy
-            if action == 3 or (action == 1 and tick_pos == 0):
+            if action == 1:
                 market_order_price = sorted_ask_side[-1][0]
                 limit_buy_prices_save.append(market_order_price)
                 buy_price_distances_save.append(market_order_price - optimal_order_price)
@@ -277,15 +253,17 @@ for message in messages.itertuples():
                 print("Execute our market order at price", market_order_price)
                 print("Execute at time:", float(dt.datetime.strftime(message.timestamp, '%H%M%S%f')))
                 print("Optimal price during the period", optimal_order_price)
-            elif action == 2:
-                if tick_pos <= 2:
-                    limit_order_price = sorted_bid_side[-tick_pos - 2][0]
-                    tick_pos += 1
-                    queue_pos = np.random.randint(0, max(sorted_bid_side[-tick_pos-1][1] - 1, 1))
-            elif action == 1:
-                limit_order_price = sorted_bid_side[-tick_pos + 1][0]
-                tick_pos -= 1
-                queue_pos = np.random.randint(0, max(sorted_bid_side[-tick_pos-1][1] - 1, 1))
+                continue
+
+            if market_order_at_the_end and time_left <= 0:
+                market_order_price = sorted_ask_side[-1][0]
+                print("Timeout! Execute our market order at price", market_order_price)
+                print("Execute at time:", float(dt.datetime.strftime(message.timestamp, '%H%M%S%f')))
+                limit_buy_prices_save.append(market_order_price)
+                buy_price_distances_save.append(market_order_price - optimal_order_price)
+                execution_time_save.append(current_time - order_placement_time)
+                limit_order_price = 0
+                order_number -= 1
 
 
         # early exit if all orders have been executed
@@ -297,9 +275,9 @@ for message in messages.itertuples():
 
 print("Finish simulating!")
 
-np.save('data/{}_order#{}_timeLimit{}_limit_buy_prices_save.npy'.format(model_name, preset_order_number, market_order_at_the_end), limit_buy_prices_save)
-np.save('data/{}_order#{}_timeLimit{}_buy_price_distances_save.npy'.format(model_name, preset_order_number, market_order_at_the_end), buy_price_distances_save)
-np.save('data/{}_order#{}_timeLimit{}_benchmark_execution_time_save.npy'.format(model_name, preset_order_number, market_order_at_the_end), execution_time_save)
+np.save('data/q-learning_order#{}_timeLimit{}_limit_buy_prices_save.npy'.format(preset_order_number, market_order_at_the_end), limit_buy_prices_save)
+np.save('data/q-learning_order#{}_timeLimit{}_buy_price_distances_save.npy'.format(preset_order_number, market_order_at_the_end), buy_price_distances_save)
+np.save('data/q-learning_order#{}_timeLimit{}_execution_time_save.npy'.format(preset_order_number, market_order_at_the_end), execution_time_save)
 
 print("Average of buy_price_distances is", np.mean(buy_price_distances_save))
 print("Median of buy_price_distances is", np.median(buy_price_distances_save))
